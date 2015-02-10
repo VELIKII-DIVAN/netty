@@ -179,7 +179,9 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
             }
         } else {
             components.add(cIndex, c);
-            updateComponentOffsets(cIndex);
+            if (readableBytes != 0) {
+                updateComponentOffsets(cIndex);
+            }
         }
         return cIndex;
     }
@@ -331,8 +333,13 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
      */
     public CompositeByteBuf removeComponent(int cIndex) {
         checkComponentIndex(cIndex);
-        components.remove(cIndex).freeIfNecessary();
-        updateComponentOffsets(cIndex);
+        Component comp = components.remove(cIndex);
+        int len = comp.length;
+        comp.freeIfNecessary();
+        if (len > 0) {
+            // Only need to call updateComponentOffsets if the length was > 0
+            updateComponentOffsets(cIndex);
+        }
         return this;
     }
 
@@ -345,13 +352,23 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
     public CompositeByteBuf removeComponents(int cIndex, int numComponents) {
         checkComponentIndex(cIndex, numComponents);
 
+        if (numComponents == 0) {
+            return this;
+        }
         List<Component> toRemove = components.subList(cIndex, cIndex + numComponents);
+        boolean needsUpdate = false;
         for (Component c: toRemove) {
+            if (c.length > 0) {
+                needsUpdate = true;
+            }
             c.freeIfNecessary();
         }
         toRemove.clear();
 
-        updateComponentOffsets(cIndex);
+        if (needsUpdate) {
+            // Only need to call updateComponentOffsets if the length was > 0
+            updateComponentOffsets(cIndex);
+        }
         return this;
     }
 
@@ -1086,6 +1103,7 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf {
             } else if (offset < c.offset) {
                 high = mid - 1;
             } else {
+                assert c.length != 0;
                 return c;
             }
         }
